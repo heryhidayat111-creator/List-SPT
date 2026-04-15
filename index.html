@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Manajemen Cabang v3.2 - Live Editable Notes</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            --sidebar-bg: #1e293b;
+            --sidebar-text: #94a3b8;
+            --accent: #3b82f6;
+            --border-color: #e2e8f0;
+            --bg-main: #f1f5f9;
+        }
+
+        body { font-family: 'Inter', sans-serif; margin: 0; display: flex; height: 100vh; background: var(--bg-main); overflow: hidden; }
+
+        /* --- SIDEBAR --- */
+        #sidebar { width: var(--sidebar-width); background: var(--sidebar-bg); color: white; display: flex; flex-direction: column; flex-shrink: 0; transition: 0.3s; position: relative; z-index: 1000; }
+        #sidebar.collapsed { margin-left: calc(var(--sidebar-width) * -1); }
+        .sidebar-header { padding: 24px 20px; font-weight: 800; border-bottom: 1px solid #334155; white-space: nowrap; }
+        .nav-menu { flex-grow: 1; padding: 10px 0; overflow-y: auto; }
+        .nav-btn { background: transparent; border: none; color: var(--sidebar-text); padding: 14px 20px; text-align: left; cursor: pointer; font-size: 14px; display: flex; align-items: center; gap: 12px; width: 100%; transition: 0.2s; }
+        .nav-btn:hover, .nav-btn.active-link { color: white; background: #334155; }
+        .nav-btn.active-link { border-left: 4px solid var(--accent); }
+
+        .sub-menu { background: #0f172a; max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; }
+        .sub-menu.show { max-height: 250px; }
+        .sub-btn { padding: 10px 20px 10px 52px; font-size: 13px; color: #64748b; cursor: pointer; }
+        .sub-btn:hover { color: white; background: #1e293b; }
+        .sub-btn.active-sub { color: var(--accent); font-weight: bold; }
+
+        /* --- CONTENT AREA --- */
+        #main-content { flex-grow: 1; display: flex; flex-direction: column; min-width: 0; }
+        .top-bar { height: 60px; background: white; border-bottom: 1px solid var(--border-color); display: flex; align-items: center; padding: 0 20px; gap: 15px; }
+        .toggle-trigger { background: #f1f5f9; border: 1px solid var(--border-color); border-radius: 6px; padding: 8px 12px; cursor: pointer; font-size: 18px; }
+        .content-area { padding: 25px; overflow: auto; flex-grow: 1; }
+
+        .card { background: white; border: 1px solid var(--border-color); padding: 25px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+        .grid-menu { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 15px; }
+        .btn-menu { background: white; border: 1px solid var(--border-color); padding: 20px; text-align: center; cursor: pointer; font-weight: 600; border-radius: 8px; }
+        .btn-menu:hover { border-color: var(--accent); color: var(--accent); }
+        
+        .hidden { display: none !important; }
+        input, select, textarea { padding: 10px; border: 1px solid var(--border-color); border-radius: 4px; font-family: inherit; outline: none; }
+
+        /* --- TABLE & LIVE EDIT --- */
+        .table-wrapper { overflow-x: auto; background: white; border: 1px solid var(--border-color); border-radius: 8px; }
+        table { width: 100%; border-collapse: collapse; min-width: 1300px; }
+        th { background: #f8fafc; padding: 12px 14px; text-align: left; border-bottom: 2px solid var(--border-color); font-size: 11px; color: #64748b; text-transform: uppercase; position: sticky; top: 0; }
+        td { padding: 8px 14px; border-bottom: 1px solid #f1f5f9; font-size: 13px; color: #334155; }
+        
+        .search-row th { background: #fff; padding: 5px 14px; }
+        .search-input { width: 100%; font-size: 11px; padding: 5px; border: 1px solid #e2e8f0; border-radius: 3px; }
+
+        /* Style khusus input catatan di dalam tabel */
+        .live-note { width: 100%; border: 1px solid transparent; background: transparent; padding: 5px; font-size: 13px; transition: 0.2s; }
+        .live-note:hover { border-color: #cbd5e1; background: #fff; }
+        .live-note:focus { border-color: var(--accent); background: #fff; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.1); }
+
+        .text-right { text-align: right; font-weight: 600; }
+        .delete-link { color: #ef4444; border: none; background: none; cursor: pointer; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar">
+        <div class="sidebar-header">ADMIN DASHBOARD</div>
+        <div class="nav-menu">
+            <button id="nav-input" class="nav-btn active-link" onclick="handleNav('input')">📝 Input Transaksi</button>
+            <button id="nav-laporan" class="nav-btn" onclick="handleNav('laporan')">📊 Database Laporan</button>
+            <div class="nav-item">
+                <button id="nav-master" class="nav-btn" onclick="toggleMasterMenu()">⚙️ Master Data <span style="margin-left:auto">▾</span></button>
+                <div id="sub-master" class="sub-menu">
+                    <div id="sub-cabang" class="sub-btn" onclick="openMasterSub('cabang')">Manajemen Cabang</div>
+                    <div id="sub-trans" class="sub-btn" onclick="openMasterSub('trans')">Konfigurasi Form</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="main-content">
+        <div class="top-bar">
+            <button class="toggle-trigger" onclick="toggleSidebar()">☰</button>
+            <h4 id="view-title" style="margin:0; font-weight: 800;">INPUT TRANSAKSI</h4>
+        </div>
+
+        <div class="content-area">
+            
+            <div id="section-master-cabang" class="hidden">
+                <div class="card">
+                    <h3>⚙️ Manajemen Cabang</h3>
+                    <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                        <input type="text" id="m-branch-name" placeholder="Nama Cabang..." style="flex-grow:1">
+                        <button onclick="addMasterBranch()" style="background:var(--accent); color:white; border:none; padding:10px 25px; cursor:pointer; font-weight:700; border-radius:4px;">+ TAMBAH</button>
+                    </div>
+                    <div id="master-branch-list"></div>
+                </div>
+            </div>
+
+            <div id="section-master-trans" class="hidden">
+                <div class="card">
+                    <h3>⚙️ Konfigurasi Transaksi</h3>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom:15px">
+                        <input type="text" id="m-name" placeholder="Nama Transaksi">
+                        <input type="text" id="m-fields" placeholder="Kolom (Keterangan, Jumlah, Tanggal Awal, Tanggal Akhir, Durasi)">
+                    </div>
+                    <button onclick="addMasterTrans()" style="background:var(--accent); color:white; border:none; padding:12px 25px; cursor:pointer; font-weight:700; border-radius:4px;">SIMPAN</button>
+                    <div id="master-trans-list" style="margin-top:20px"></div>
+                </div>
+            </div>
+
+            <div id="section-input">
+                <div id="page-cabang"><div class="grid-menu" id="branch-grid-input"></div></div>
+                <div id="page-transaksi" class="hidden">
+                    <button onclick="showSubPage('page-cabang')" style="margin-bottom:15px; cursor:pointer;">← Kembali</button>
+                    <h3 id="current-branch-display"></h3>
+                    <div id="trans-type-grid" class="grid-menu"></div>
+                </div>
+                <div id="page-form" class="hidden">
+                    <div class="card" style="max-width: 600px; margin: auto;">
+                        <h3 id="form-type-display"></h3>
+                        <form id="main-form">
+                            <div id="dynamic-fields-container"></div>
+                            <button type="submit" style="width:100%; background:var(--accent); color:white; border:none; padding:16px; margin-top:20px; cursor:pointer; font-weight:800; border-radius:6px;">SIMPAN DATA</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+
+            <div id="section-laporan" class="hidden">
+                <div id="page-laporan-menu"><div class="grid-menu" id="branch-grid-report"></div></div>
+                <div id="page-laporan-detail" class="hidden">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px">
+                        <h3 id="report-branch-name" style="margin:0"></h3>
+                        <button onclick="exportExcel()" style="padding: 10px 20px; background: #10b981; color:white; border:none; cursor:pointer; font-weight:700">📥 DOWNLOAD EXCEL</button>
+                    </div>
+                    <div class="table-wrapper">
+                        <table id="table-data">
+                            <thead id="table-head"></thead>
+                            <tbody id="tb-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let branches = ["Jakarta", "Surabaya", "Bandung"];
+    let masterData = { "Sewa Kendaraan": ["Keterangan", "Jumlah", "Tanggal Awal", "Tanggal Akhir", "Durasi"] };
+    let database = []; // Setiap data akan punya property 'uniqueId' untuk editing
+    let selectedBranch = "", selectedTrans = "";
+
+    function init() { renderBranchGrids(); renderMasterTransList(); renderMasterBranchList(); }
+
+    // --- NAV & UI ---
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('collapsed'); }
+    function toggleMasterMenu() { document.getElementById('sub-master').classList.toggle('show'); }
+    function handleNav(mode) {
+        ['section-input', 'section-laporan', 'section-master-cabang', 'section-master-trans'].forEach(s => document.getElementById(s).classList.add('hidden'));
+        document.querySelectorAll('.nav-btn, .sub-btn').forEach(b => b.classList.remove('active-link', 'active-sub'));
+        if (mode === 'input' || mode === 'laporan') {
+            document.getElementById('nav-' + mode).classList.add('active-link');
+            document.getElementById('section-' + mode).classList.remove('hidden');
+            if(mode === 'input') showSubPage('page-cabang');
+            if(mode === 'laporan') showSubPage('page-laporan-menu');
+        }
+    }
+    function openMasterSub(sub) {
+        handleNav('none');
+        document.getElementById('nav-master').classList.add('active-link');
+        document.getElementById('section-master-' + sub).classList.remove('hidden');
+        document.getElementById('sub-' + sub).classList.add('active-sub');
+    }
+    function showSubPage(pageId) {
+        ['page-cabang', 'page-transaksi', 'page-form', 'page-laporan-menu', 'page-laporan-detail'].forEach(p => document.getElementById(p)?.classList.add('hidden'));
+        document.getElementById(pageId).classList.remove('hidden');
+    }
+
+    // --- DURASI OTOMATIS ---
+    function calculateDuration() {
+        const tglAwal = document.querySelector('[data-key="Tanggal Awal"]');
+        const tglAkhir = document.querySelector('[data-key="Tanggal Akhir"]');
+        const durasi = document.querySelector('[data-key="Durasi"]');
+        if (tglAwal && tglAkhir && durasi) {
+            const start = new Date(tglAwal.value); const end = new Date(tglAkhir.value);
+            if (start && end && end >= start) {
+                let months = (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth());
+                let days = end.getDate() - start.getDate();
+                if (days < 0) { months -= 1; days += new Date(end.getFullYear(), end.getMonth(), 0).getDate(); }
+                durasi.value = (months > 0 ? months + " Bln " : "") + (days >= 0 ? days + " Hari" : "");
+            }
+        }
+    }
+
+    // --- MASTER CABANG & TRANS ---
+    function renderBranchGrids() {
+        const iGrid = document.getElementById('branch-grid-input'); const rGrid = document.getElementById('branch-grid-report');
+        iGrid.innerHTML = rGrid.innerHTML = "";
+        branches.forEach(b => {
+            iGrid.innerHTML += `<div class="btn-menu" onclick="chooseBranch('${b}')">${b.toUpperCase()}</div>`;
+            rGrid.innerHTML += `<div class="btn-menu" onclick="openReportDetail('${b}')">${b.toUpperCase()}</div>`;
+        });
+    }
+    function renderMasterBranchList() {
+        const container = document.getElementById('master-branch-list'); container.innerHTML = "";
+        branches.forEach((b, i) => {
+            container.innerHTML += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee;">
+                <span>${b}</span><div><button onclick="editBranch(${i})" class="action-link edit-link">Ubah</button>
+                <button onclick="deleteBranch(${i})" class="action-link delete-link">Hapus</button></div></div>`;
+        });
+    }
+    function addMasterBranch() { const v = document.getElementById('m-branch-name').value; if(v){ branches.push(v); document.getElementById('m-branch-name').value=""; renderBranchGrids(); renderMasterBranchList(); }}
+    function editBranch(i) { const res = prompt("Nama Baru:", branches[i]); if(res){ branches[i]=res; renderBranchGrids(); renderMasterBranchList(); }}
+    function deleteBranch(i) { if(confirm("Hapus?")){ branches.splice(i,1); renderBranchGrids(); renderMasterBranchList(); }}
+    function addMasterTrans() {
+        const n = document.getElementById('m-name').value; const f = document.getElementById('m-fields').value;
+        if(n && f){ masterData[n] = f.split(',').map(s => s.trim()); renderMasterTransList(); }
+    }
+    function renderMasterTransList() {
+        const container = document.getElementById('master-trans-list'); container.innerHTML = "";
+        Object.keys(masterData).forEach(k => {
+            container.innerHTML += `<div style="display:flex; justify-content:space-between; padding:8px; border-bottom:1px solid #eee;">
+                <span><b>${k}</b>: ${masterData[k].join(', ')}</span><button onclick="deleteMasterTrans('${k}')" class="delete-link">Hapus</button></div>`;
+        });
+    }
+    function deleteMasterTrans(k) { delete masterData[k]; renderMasterTransList(); }
+
+    // --- INPUT PROSES ---
+    function chooseBranch(b) { selectedBranch = b; document.getElementById('current-branch-display').innerText = "CABANG: " + b; renderTransButtons(); showSubPage('page-transaksi'); }
+    function renderTransButtons() {
+        const container = document.getElementById('trans-type-grid'); container.innerHTML = "";
+        Object.keys(masterData).forEach(t => { container.innerHTML += `<div class="btn-menu" onclick="buildForm('${t}')">${t.toUpperCase()}</div>`; });
+    }
+    function buildForm(t) {
+        selectedTrans = t;
+        const container = document.getElementById('dynamic-fields-container');
+        const today = new Date().toISOString().split('T')[0];
+        let html = `<div style="margin-bottom:12px"><label style="font-size:11px; font-weight:700">TGL SISTEM</label><br><input type="date" id="f-tanggal-sistem" value="${today}" style="width:100%"></div>`;
+        masterData[t].forEach(f => {
+            const isDate = f.toLowerCase().includes("tanggal"); const isDur = f.toLowerCase() === "durasi";
+            html += `<div style="margin-bottom:12px"><label style="font-size:11px; font-weight:700">${f.toUpperCase()}</label><br>
+                <input type="${isDate?'date':'text'}" class="user-input" data-key="${f}" 
+                ${isDate?'onchange="calculateDuration()"':''} ${isDur?'readonly style="background:#f8fafc"':''} style="width:100%"></div>`;
+        });
+        container.innerHTML = html; showSubPage('page-form');
+    }
+
+    document.getElementById('main-form').onsubmit = (e) => {
+        e.preventDefault();
+        // Berikan ID unik setiap data untuk referensi edit
+        let entry = { uniqueId: Date.now(), Tgl_Sistem: document.getElementById('f-tanggal-sistem').value, Cabang: selectedBranch, Jenis_Transaksi: selectedTrans, Catatan: "" };
+        document.querySelectorAll('.user-input').forEach(i => entry[i.getAttribute('data-key')] = i.value);
+        database.push(entry); alert("Simpan Berhasil!"); showSubPage('page-transaksi');
+    };
+
+    // --- LAPORAN & LIVE EDIT NOTES ---
+    function openReportDetail(b) {
+        selectedBranch = b;
+        document.getElementById('report-branch-name').innerText = "LAPORAN: " + b;
+        renderReportTable();
+        showSubPage('page-laporan-detail');
+    }
+
+    function renderReportTable() {
+        const filtered = database.filter(d => d.Cabang === selectedBranch);
+        const thead = document.getElementById('table-head'); const tbody = document.getElementById('tb-body');
+        thead.innerHTML = tbody.innerHTML = "";
+        if(filtered.length === 0) { tbody.innerHTML = "<tr><td colspan='10' style='text-align:center; padding:40px'>Data Kosong</td></tr>"; return; }
+
+        let keys = ["Tgl_Sistem", "Jenis_Transaksi"];
+        Object.keys(filtered[0]).forEach(k => { if(!["uniqueId", "Tgl_Sistem", "Jenis_Transaksi", "Cabang", "Catatan"].includes(k)) keys.push(k); });
+        keys.push("Catatan"); // Catatan diletakkan paling kanan
+
+        // Header & Search
+        let hRow = "<tr>", sRow = "<tr class='search-row'>";
+        keys.forEach((k, idx) => {
+            hRow += `<th>${k.replace('_',' ')}</th>`;
+            sRow += `<th><input type="text" class="search-input" placeholder="Cari..." onkeyup="filterTable(${idx}, this.value)"></th>`;
+        });
+        thead.innerHTML = hRow + "</tr>" + sRow + "</tr>";
+
+        // Body
+        filtered.forEach(row => {
+            let tr = "<tr>";
+            keys.forEach(k => {
+                if(k === "Catatan") {
+                    // LIVE EDIT: Input ini akan mengupdate database secara langsung saat diketik
+                    tr += `<td><input type="text" class="live-note" value="${row[k]}" 
+                           placeholder="Ketik catatan di sini..." 
+                           oninput="updateNoteInDB(${row.uniqueId}, this.value)"></td>`;
+                } else {
+                    tr += `<td>${row[k] || '-'}</td>`;
+                }
+            });
+            tbody.innerHTML += tr + "</tr>";
+        });
+    }
+
+    // Fungsi Update Database Secara Real-time
+    function updateNoteInDB(id, value) {
+        const index = database.findIndex(d => d.uniqueId === id);
+        if(index !== -1) {
+            database[index].Catatan = value;
+            // Tidak perlu re-render tabel agar kursor tidak lompat (keyboard tetap aktif)
+        }
+    }
+
+    function filterTable(idx, query) {
+        const rows = document.getElementById('tb-body').getElementsByTagName('tr');
+        for (let row of rows) {
+            const cell = row.getElementsByTagName('td')[idx];
+            if (cell) {
+                const text = (cell.querySelector('input')) ? cell.querySelector('input').value : cell.textContent;
+                row.style.display = text.toLowerCase().includes(query.toLowerCase()) ? "" : "none";
+            }
+        }
+    }
+
+    function exportExcel() {
+        const data = database.filter(d => d.Cabang === selectedBranch);
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan");
+        XLSX.writeFile(wb, `Laporan_${selectedBranch}.xlsx`);
+    }
+
+    init();
+</script>
+</body>
+</html>
